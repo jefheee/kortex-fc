@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Kortex FC | Dashboard',
-  description: 'Painel analítico para Kortex FC',
+  title: 'Kortex FC | Cérebro Analítico',
+  description: 'Motor matemático e dashboard de telemetria.',
 };
 
 export default function RootLayout({
