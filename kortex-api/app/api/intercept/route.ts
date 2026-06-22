@@ -1,21 +1,12 @@
-// app/api/intercept/route.ts
 import { NextResponse } from 'next/server';
-import { adaptInventoryData } from '../../../utils/adapter';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../../../utils/supabase';
 
-// Setup do cliente Supabase usando variáveis de ambiente
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mock-supabase-url.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'mock-service-key';
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-// Cabeçalhos de CORS (Permitir requisições vindas do navegador/extensão)
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*', // Altere para a origem exata em ambiente de produção
+  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-// Tratativa para Preflight Requests (CORS OPTIONS)
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders });
 }
@@ -23,42 +14,44 @@ export async function OPTIONS() {
 export async function POST(request: Request) {
   try {
     const rawData = await request.json();
+    const userId = "usuario-padrao-uuid";
+
+    const items = Array.isArray(rawData) ? rawData : rawData?.itemData || [];
     
-    // Identificador temporário. Em ambiente real usar JWT ou Auth Header do usuário
-    const userId = "usuario-sessao-ativa"; 
-
-    // Adapter: Estrutura os dados brutos interceptados para o modelo de BD local
-    const recordsToUpsert = adaptInventoryData(rawData, userId);
-
-    if (recordsToUpsert.length === 0) {
+    if (!items || items.length === 0) {
       return NextResponse.json(
-        { message: 'Payload vazio ou incompatível.' },
+        { message: 'Nenhum dado válido para ingestão.' },
         { status: 400, headers: corsHeaders }
       );
     }
 
-    // Realiza o Upsert no Supabase
-    const { data, error } = await supabase
+    const recordsToUpsert = items.map((item: any) => ({
+      user_id: userId,
+      player_id: Number(item.id),
+      asset_id: item.assetId ? Number(item.assetId) : null,
+      is_untradeable: Boolean(item.untradeable),
+      is_duplicate: Boolean(item.duplicate)
+    }));
+
+    const { error } = await supabase
       .from('User_Inventory')
-      .upsert(recordsToUpsert, {
-        onConflict: 'UserId, PlayerId', // Colunas únicas para resolver o conflito do Upsert
-      });
+      .upsert(recordsToUpsert);
 
     if (error) {
-      console.error('[Kortex API Supabase] Erro ao gravar dados:', error);
+      console.error('[Kortex API] Erro ao gravar dados no Supabase:', error);
       return NextResponse.json(
-        { message: 'Falha na persistência de dados', error: error.message },
+        { message: 'Falha na persistência de dados no banco.' },
         { status: 500, headers: corsHeaders }
       );
     }
 
     return NextResponse.json(
-      { message: 'Sucesso: Dados injetados.', count: recordsToUpsert.length },
+      { message: 'Sucesso: Dados de inventário salvos.', count: recordsToUpsert.length },
       { status: 200, headers: corsHeaders }
     );
     
   } catch (error) {
-    console.error('[Kortex API Endpoint] Falha severa no recebimento:', error);
+    console.error('[Kortex API] Falha severa no endpoint:', error);
     return NextResponse.json(
       { message: 'Falha interna no servidor.' },
       { status: 500, headers: corsHeaders }

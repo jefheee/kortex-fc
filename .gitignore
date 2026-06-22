@@ -1,0 +1,20 @@
+# dependências
+node_modules/
+
+# next.js
+.next/
+out/
+
+# logs de erro
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# arquivos sensíveis de ambiente
+.env
+.env*.local
+
+# arquivos temporários do sistema operacional
+.DS_Store
+Thumbs.db
