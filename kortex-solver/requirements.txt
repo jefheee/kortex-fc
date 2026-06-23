@@ -2,3 +2,5 @@ fastapi
 uvicorn
 ortools
 supabase
+python-dotenv
+pydantic

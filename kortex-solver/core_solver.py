@@ -1,41 +1,44 @@
 from ortools.sat.python import cp_model
+from fastapi import HTTPException
 
-class KortexSolver:
-    def __init__(self):
-        self.model = cp_model.CpModel()
+def solve_sbc(inventory: list, target_rating: int) -> list:
+    if len(inventory) < 11:
+        raise HTTPException(status_code=422, detail="Inventário possui menos de 11 cartas.")
 
-    def solve_sbc(self, inventory: list, constraints_dict: dict) -> list:
-        num_players = len(inventory)
-        if num_players < 11:
-            return []
-
-        # Declara as variáveis booleanas de seleção
-        x = {i: self.model.NewBoolVar(f"x_{i}") for i in range(num_players)}
-
-        # Restrição de tamanho obrigatório de plantel
-        self.model.Add(sum(x[i] for i in range(num_players)) == 11)
-
-        # Restrição simulada de química: no mínimo 5 cartas devem possuir o mesmo ID de liga
-        leagues = set(player.get('league_id') for player in inventory if player.get('league_id') is not None)
-        league_bools = []
-
-        for league in leagues:
-            b = self.model.NewBoolVar(f"league_{league}_active")
-            league_sum = sum(x[i] for i in range(num_players) if inventory[i].get('league_id') == league)
-            
-            self.model.Add(league_sum >= 5).OnlyEnforceIf(b)
-            self.model.Add(league_sum < 5).OnlyEnforceIf(b.Not())
-            
-            league_bools.append(b)
-
-        if league_bools:
-            self.model.Add(sum(league_bools) >= 1)
-
-        # Invocação do solver
-        solver = cp_model.CpSolver()
-        status = solver.Solve(self.model)
-
-        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-            return [inventory[i]['player_id'] for i in range(num_players) if solver.Value(x[i])]
+    model = cp_model.CpModel()
+    
+    # Variáveis de Decisão Booleanas
+    x = [model.NewBoolVar(f"x_{i}") for i in range(len(inventory))]
+    
+    # Restrição 1 (Tamanho Exato)
+    model.Add(sum(x) == 11)
+    
+    # Restrição 2 (Rating Alvo - MVP)
+    model.Add(sum(x[i] * inventory[i].get('rating', 0) for i in range(len(inventory))) >= target_rating * 11)
+    
+    # Estruturação de Pesos para Minimização
+    costs = []
+    for player in inventory:
+        is_duplicate = player.get('is_duplicate', False)
+        is_untradeable = player.get('is_untradeable', False)
+        rating = player.get('rating', 0)
         
-        return []
+        if is_duplicate:
+            costs.append(-100000)
+        elif is_untradeable:
+            costs.append(0)
+        else:
+            costs.append(rating * 1000)
+            
+    # Aplique o objetivo
+    model.Minimize(sum(x[i] * costs[i] for i in range(len(inventory))))
+    
+    # Invoque o Solver
+    solver = cp_model.CpSolver()
+    status = solver.Solve(model)
+    
+    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+        selected_players = [inventory[i] for i in range(len(inventory)) if solver.Value(x[i])]
+        return selected_players
+    
+    raise HTTPException(status_code=422, detail="Nenhuma solução viável encontrada.")
