@@ -1,32 +1,41 @@
 from ortools.sat.python import cp_model
 
-def solve_sbc(inventory: list, constraints: dict) -> list:
-    """
-    Motor base para resolução de DMEs (PLI) usando o CP-SAT Solver.
-    """
-    model = cp_model.CpModel()
+class KortexSolver:
+    def __init__(self):
+        self.model = cp_model.CpModel()
 
-    if not inventory or len(inventory) < 11:
+    def solve_sbc(self, inventory: list, constraints_dict: dict) -> list:
+        num_players = len(inventory)
+        if num_players < 11:
+            return []
+
+        # Declara as variáveis booleanas de seleção
+        x = {i: self.model.NewBoolVar(f"x_{i}") for i in range(num_players)}
+
+        # Restrição de tamanho obrigatório de plantel
+        self.model.Add(sum(x[i] for i in range(num_players)) == 11)
+
+        # Restrição simulada de química: no mínimo 5 cartas devem possuir o mesmo ID de liga
+        leagues = set(player.get('league_id') for player in inventory if player.get('league_id') is not None)
+        league_bools = []
+
+        for league in leagues:
+            b = self.model.NewBoolVar(f"league_{league}_active")
+            league_sum = sum(x[i] for i in range(num_players) if inventory[i].get('league_id') == league)
+            
+            self.model.Add(league_sum >= 5).OnlyEnforceIf(b)
+            self.model.Add(league_sum < 5).OnlyEnforceIf(b.Not())
+            
+            league_bools.append(b)
+
+        if league_bools:
+            self.model.Add(sum(league_bools) >= 1)
+
+        # Invocação do solver
+        solver = cp_model.CpSolver()
+        status = solver.Solve(self.model)
+
+        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
+            return [inventory[i]['player_id'] for i in range(num_players) if solver.Value(x[i])]
+        
         return []
-
-    # Dicionário para armazenar a variável booleana de decisão para cada carta
-    player_vars = {}
-    for item in inventory:
-        player_id = item.get('player_id')
-        player_vars[player_id] = model.NewBoolVar(f'player_{player_id}')
-
-    # Restrição base: Exatamente 11 jogadores devem ser selecionados
-    model.Add(sum(player_vars[player_id] for player_id in player_vars) == 11)
-
-    # TODO: Implementar matriz completa do Fator de Correção (CF) da EA.
-    # TODO: Implementar método Big-M para química e rating global da squad.
-
-    # Configuração e inicialização do solucionador
-    solver = cp_model.CpSolver()
-    status = solver.Solve(model)
-
-    if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-        selected_ids = [pid for pid in player_vars if solver.Value(player_vars[pid])]
-        return selected_ids
-
-    return []
