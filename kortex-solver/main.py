@@ -1,28 +1,41 @@
+import os
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 from core_solver import KortexSolver
+from supabase import create_client, Client
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="Kortex FC - Motor CP-SAT")
 
-class PlayerItem(BaseModel):
-    player_id: int
-    rating: int
-    league_id: Optional[int] = None
-    is_untradeable: Optional[bool] = False
-    is_duplicate: Optional[bool] = False
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+try:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception:
+    supabase = None
 
 class SolvePayload(BaseModel):
-    inventory: List[PlayerItem]
+    user_id: str = "00000000-0000-0000-0000-000000000000"
     constraints: dict
 
 @app.post("/solve")
 def solve_endpoint(payload: SolvePayload):
     try:
+        if not supabase:
+            raise Exception("Supabase client not initialized. Check env vars.")
+
         solver = KortexSolver()
-        inventory_list = [item.dict() for item in payload.inventory]
         
+        response = supabase.table('User_Inventory').select('*').eq('user_id', payload.user_id).execute()
+        inventory_list = response.data
+        
+        if not inventory_list:
+            raise Exception("Inventário vazio ou não encontrado para este usuário.")
+
         selected_ids = solver.solve_sbc(inventory_list, payload.constraints)
         
         return {

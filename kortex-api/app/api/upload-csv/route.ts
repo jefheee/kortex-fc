@@ -24,24 +24,46 @@ export async function POST(request: Request) {
     }
 
     const headerLine = lines[0].replace(/\r/g, '');
-    const headers = headerLine.split(',');
+    const headers = headerLine.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(h => h.replace(/^"|"$/g, '').trim());
 
-    const idIndex = headers.indexOf('Id');
-    const untradeableIndex = headers.indexOf('Untradeable');
-    const locationIndex = headers.indexOf('Location');
-    
-    // Novas colunas
-    const nameIndex = headers.indexOf('Name');
-    const ratingIndex = headers.indexOf('Rating');
-    const posIndex = headers.indexOf('Position');
-    const rarityIndex = headers.indexOf('Rarity');
-    const countryIndex = headers.indexOf('Country');
-    const leagueIndex = headers.indexOf('League');
-    const clubIndex = headers.indexOf('Club');
+    const getIndex = (name: string) => {
+      const idx = headers.indexOf(name);
+      if (idx !== -1) return idx;
+      // try without spaces
+      return headers.indexOf(name.replace(/\s+/g, ''));
+    };
 
+    const idIndex = getIndex('Id');
     if (idIndex === -1) {
       return NextResponse.json({ message: 'Coluna Id não encontrada.' }, { status: 400 });
     }
+
+    const lastnameIndex = getIndex('Lastname');
+    const nameIndex = getIndex('Name');
+    const ratingIndex = getIndex('Rating');
+    const positionIndex = getIndex('Position');
+    const rarityIndex = getIndex('Rarity');
+    const skillMovesIndex = getIndex('Skill Moves');
+    const weakFootIndex = getIndex('Weak Foot');
+    const chemistryIndex = getIndex('Chemistry');
+    const countryIndex = getIndex('Country');
+    const leagueIndex = getIndex('League');
+    const clubIndex = getIndex('Club');
+    const untradeableIndex = getIndex('Untradeable');
+    const loansIndex = getIndex('Loans');
+    const boughtForIndex = getIndex('Bought For');
+    const priceRangeIndex = getIndex('Price Range');
+    const discardValueIndex = getIndex('Discard Value');
+    const marketAverageIndex = getIndex('Market Average');
+    const gamesPlayedIndex = getIndex('Games Played');
+    const goalsIndex = getIndex('Goals');
+    const assistsIndex = getIndex('Assists');
+    const yellowCardsIndex = getIndex('Yellow Cards');
+    const redCardsIndex = getIndex('Red Cards');
+    const priceUpdatedAtIndex = getIndex('Price Updated At');
+    const locationIndex = getIndex('Location');
+
+    const positionMap: Record<string, string> = { "0":"GK", "2":"RWB", "3":"RB", "5":"CB", "7":"LB", "8":"LWB", "10":"CDM", "14":"CM", "12":"RM", "16":"LM", "18":"CAM", "21":"CF", "23":"ST", "25":"RW", "27":"LW" };
 
     const recordsToUpsert = [];
     let duplicates = 0;
@@ -51,42 +73,64 @@ export async function POST(request: Request) {
       if (!line.trim()) continue;
 
       const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
-      
-      const rawId = cols[idIndex]?.replace(/"/g, '')?.trim();
-      const rawUntradeable = untradeableIndex !== -1 ? cols[untradeableIndex]?.replace(/"/g, '')?.trim() : 'false';
-      const rawLocation = locationIndex !== -1 ? cols[locationIndex]?.replace(/"/g, '')?.trim() : '';
 
+      const getStr = (index: number) => {
+        if (index === -1 || cols[index] === undefined) return null;
+        const val = cols[index].replace(/^"|"$/g, '').trim();
+        return val === "" ? null : val;
+      };
+      
+      const getInt = (index: number) => {
+        const str = getStr(index);
+        if (!str) return 0;
+        const parsed = parseInt(str, 10);
+        return isNaN(parsed) ? 0 : parsed;
+      };
+      
+      const rawId = getStr(idIndex);
       if (!rawId || isNaN(Number(rawId))) continue;
 
       const player_id = Number(rawId);
-      const is_untradeable = (rawUntradeable.toLowerCase() === 'true' || rawUntradeable === '1');
-      const is_duplicate = (rawLocation.toUpperCase() === 'SBCSTORAGE');
+      
+      const rawUntradeable = getStr(untradeableIndex);
+      const is_untradeable = rawUntradeable ? (rawUntradeable.toLowerCase() === 'true' || rawUntradeable === '1') : false;
+      
+      const rawLocation = getStr(locationIndex);
+      const is_duplicate = rawLocation ? (rawLocation.toUpperCase() === 'SBCSTORAGE') : false;
 
       if (is_duplicate) duplicates++;
 
-      // Extração de metadados
-      const name = nameIndex !== -1 ? cols[nameIndex]?.replace(/"/g, '')?.trim() : null;
-      const rawRating = ratingIndex !== -1 ? cols[ratingIndex]?.replace(/"/g, '')?.trim() : null;
-      const rating = rawRating ? parseInt(rawRating, 10) : null;
-      const position = posIndex !== -1 ? cols[posIndex]?.replace(/"/g, '')?.trim() : null;
-      const rarity = rarityIndex !== -1 ? cols[rarityIndex]?.replace(/"/g, '')?.trim() : null;
-      const country = countryIndex !== -1 ? cols[countryIndex]?.replace(/"/g, '')?.trim() : null;
-      const league = leagueIndex !== -1 ? cols[leagueIndex]?.replace(/"/g, '')?.trim() : null;
-      const club = clubIndex !== -1 ? cols[clubIndex]?.replace(/"/g, '')?.trim() : null;
+      const rawPosition = getStr(positionIndex);
+      const parsedPosition = rawPosition ? (positionMap[rawPosition] || rawPosition) : null;
 
       recordsToUpsert.push({
         user_id: userId,
         player_id: player_id,
+        lastname: getStr(lastnameIndex),
+        name: getStr(nameIndex),
+        rating: getInt(ratingIndex),
+        position: parsedPosition,
+        rarity: getStr(rarityIndex),
+        skill_moves: getInt(skillMovesIndex),
+        weak_foot: getInt(weakFootIndex),
+        chemistry: getStr(chemistryIndex),
+        country: getStr(countryIndex),
+        league: getStr(leagueIndex),
+        club: getStr(clubIndex),
         is_untradeable: is_untradeable,
-        is_duplicate: is_duplicate,
-        asset_id: null,
-        name,
-        rating: isNaN(rating as any) ? null : rating,
-        position,
-        rarity,
-        country,
-        league,
-        club
+        loans: getInt(loansIndex),
+        bought_for: getInt(boughtForIndex),
+        price_range: getStr(priceRangeIndex),
+        discard_value: getInt(discardValueIndex),
+        market_average: getInt(marketAverageIndex),
+        games_played: getInt(gamesPlayedIndex),
+        goals: getInt(goalsIndex),
+        assists: getInt(assistsIndex),
+        yellow_cards: getInt(yellowCardsIndex),
+        red_cards: getInt(redCardsIndex),
+        price_updated_at: getStr(priceUpdatedAtIndex),
+        location: rawLocation,
+        is_duplicate: is_duplicate
       });
     }
 
