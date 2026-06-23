@@ -8,7 +8,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: 'Nenhum dado CSV enviado.' }, { status: 400 });
     }
 
-    const userId = "usuario-padrao-uuid";
+    const userId = "00000000-0000-0000-0000-000000000000";
+
+    // Garantir a integridade referencial instanciando o Club_Meta pai
+    await supabase.from('Club_Meta').upsert({ 
+      user_id: userId, 
+      coins: 0, 
+      points: 0, 
+      last_sync: new Date().toISOString() 
+    }, { onConflict: 'user_id' });
 
     // Parser simples do CSV
     const lines = csvData.split('\n');
@@ -33,7 +41,6 @@ export async function POST(request: Request) {
       const line = lines[i].replace(/\r/g, '');
       if (!line.trim()) continue;
 
-      // regex rudimentar para lidar com vírgulas dentro de aspas no CSV
       const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
       
       const rawId = cols[idIndex]?.replace(/"/g, '')?.trim();
@@ -58,6 +65,9 @@ export async function POST(request: Request) {
     if (recordsToUpsert.length === 0) {
       return NextResponse.json({ message: 'Nenhum registro válido extraído do CSV.' }, { status: 400 });
     }
+
+    // Limpeza de inventário antigo (overwrite total)
+    await supabase.from('User_Inventory').delete().eq('user_id', userId);
 
     const { error } = await supabase
       .from('User_Inventory')
