@@ -1,8 +1,12 @@
 -- Tabela 1: Club_Meta
+DROP TABLE IF EXISTS public."User_Inventory" CASCADE;
+DROP TABLE IF EXISTS public."Club_Meta" CASCADE;
+
 CREATE TABLE public."Club_Meta" (
     user_id UUID PRIMARY KEY,
     coins INTEGER NOT NULL DEFAULT 0,
     points INTEGER NOT NULL DEFAULT 0,
+    tokens INTEGER NOT NULL DEFAULT 0,
     last_sync TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -13,7 +17,14 @@ CREATE TABLE public."User_Inventory" (
     player_id BIGINT NOT NULL,
     asset_id BIGINT,
     is_untradeable BOOLEAN NOT NULL DEFAULT FALSE,
-    is_duplicate BOOLEAN NOT NULL DEFAULT FALSE
+    is_duplicate BOOLEAN NOT NULL DEFAULT FALSE,
+    name TEXT,
+    rating INTEGER,
+    position TEXT,
+    rarity TEXT,
+    country TEXT,
+    league TEXT,
+    club TEXT
 );
 
 -- Índice de Performance para Otimização CP-SAT

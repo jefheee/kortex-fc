@@ -2,26 +2,35 @@
 import React, { useState } from 'react';
 
 export default function DashboardPage() {
-  const [uploadStatus, setUploadStatus] = useState<string>("Aguardando arquivo CSV...");
+  const [uploadStatus, setUploadStatus] = useState<string>("Aguardando");
   const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [totalCards, setTotalCards] = useState<number>(0);
+  const [duplicatedCards, setDuplicatedCards] = useState<number>(0);
+  const [lastSync, setLastSync] = useState<string>("--:--:--");
+
+  // Vault state
+  const [coins, setCoins] = useState<string>('');
+  const [points, setPoints] = useState<string>('');
+  const [tokens, setTokens] = useState<string>('');
+  const [vaultStatus, setVaultStatus] = useState<string>('');
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
-    setUploadStatus("Processando arquivo local...");
+    setUploadStatus("Processando...");
 
     const reader = new FileReader();
     reader.onload = async (e) => {
       const text = e.target?.result;
       if (typeof text !== 'string') {
-        setUploadStatus("Erro na leitura do arquivo.");
+        setUploadStatus("Erro");
         setIsUploading(false);
         return;
       }
 
-      setUploadStatus("Sincronizando com o banco...");
+      setUploadStatus("Sincronizando...");
       try {
         const response = await fetch('/api/upload-csv', {
           method: 'POST',
@@ -30,18 +39,43 @@ export default function DashboardPage() {
         });
 
         if (response.ok) {
+          const data = await response.json();
+          setTotalCards(data.count || 0);
+          setDuplicatedCards(data.duplicatedCount || 0);
+          
+          const now = new Date();
+          setLastSync(now.toLocaleTimeString('pt-BR'));
+          
           setUploadStatus("Sincronizado");
         } else {
-          setUploadStatus("Erro na sincronização.");
+          setUploadStatus("Erro");
         }
       } catch (err) {
         console.error(err);
-        setUploadStatus("Erro de rede.");
+        setUploadStatus("Erro");
       } finally {
         setIsUploading(false);
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleSyncVault = async () => {
+    setVaultStatus("Sincronizando...");
+    try {
+      const response = await fetch('/api/sync-vault', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coins, points, tokens })
+      });
+      if (response.ok) {
+        setVaultStatus("Sincronizado");
+      } else {
+        setVaultStatus("Erro");
+      }
+    } catch {
+      setVaultStatus("Erro");
+    }
   };
 
   return (
@@ -101,28 +135,80 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Ativos Contábeis (Input Manual) */}
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm mb-6 flex flex-col gap-4">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-2">Ativos Contábeis (Input Manual)</h3>
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-400 mb-1">FC Coins</label>
+                <input type="number" value={coins} onChange={e => setCoins(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded p-2 text-gray-200 focus:outline-none focus:border-emerald-500" placeholder="Ex: 50000" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-400 mb-1">FC Points</label>
+                <input type="number" value={points} onChange={e => setPoints(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded p-2 text-gray-200 focus:outline-none focus:border-emerald-500" placeholder="Ex: 100" />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-gray-400 mb-1">Fichas / Tokens</label>
+                <input type="number" value={tokens} onChange={e => setTokens(e.target.value)} className="w-full bg-gray-950 border border-gray-800 rounded p-2 text-gray-200 focus:outline-none focus:border-emerald-500" placeholder="Ex: 3" />
+              </div>
+              <div className="flex items-end">
+                <button onClick={handleSyncVault} className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 px-4 rounded transition-colors h-10 flex items-center justify-center min-w-[140px]">
+                  {vaultStatus === "Sincronizando..." ? "Aguarde..." : "Sincronizar Cofre"}
+                </button>
+              </div>
+            </div>
+            {vaultStatus && vaultStatus !== "Sincronizando..." && (
+              <div className={`text-xs mt-1 ${vaultStatus === "Sincronizado" ? "text-emerald-400" : "text-red-400"}`}>
+                {vaultStatus === "Sincronizado" ? "✔ Atualizado com sucesso." : "✖ Falha na sincronização."}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm">
               <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Moedas do Clube</h3>
-                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Status da Sincronização</h3>
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path></svg>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-white">0</span>
-                <span className="text-sm text-gray-500 font-medium">FC</span>
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${uploadStatus === "Sincronizado" ? "bg-emerald-500" : uploadStatus === "Processando..." ? "bg-blue-500" : uploadStatus === "Aguardando" ? "bg-yellow-500" : "bg-red-500"}`}></div>
+                <span className="text-lg font-bold text-gray-100">{uploadStatus}</span>
               </div>
             </div>
 
             <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm">
               <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Cartões Sincronizados</h3>
-                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Duplicatas Inegociáveis</h3>
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold text-white">0</span>
+                <span className="text-2xl font-bold text-white">{duplicatedCards}</span>
                 <span className="text-sm text-gray-500 font-medium">assets</span>
               </div>
             </div>
+
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Total de Ativos Mapeados</h3>
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold text-white">{totalCards}</span>
+                <span className="text-sm text-gray-500 font-medium">assets</span>
+              </div>
+            </div>
+
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 shadow-sm">
+              <div className="flex justify-between items-start mb-4">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Último Upsert DB</h3>
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-gray-100">{lastSync}</span>
+              </div>
+            </div>
+
           </div>
         </main>
       </div>
