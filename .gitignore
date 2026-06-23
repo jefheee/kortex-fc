@@ -18,3 +18,7 @@ yarn-error.log*
 # arquivos temporários do sistema operacional
 .DS_Store
 Thumbs.db
+
+# imagens pesadas / designs de cards
+kortex-api/public/fc-26-clean-card-designs/
+
